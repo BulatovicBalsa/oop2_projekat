@@ -1,0 +1,262 @@
+#pragma once
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+using namespace std;
+
+struct Token {
+	char kind;
+	int value;
+	string name;
+	inline Token(char ch) :kind(ch), value(0) { }
+	inline Token(char ch, int val) : kind(ch), value(val) { }
+	inline Token(char ch, string s) : name(s), kind(ch), value(0) { }
+};
+
+class Token_stream {
+	bool full;
+	Token buffer;
+public:
+	vector<int> ponudjeni;
+	inline bool contains(int br) {
+		for (vector<int>::iterator iter = ponudjeni.begin(); iter < ponudjeni.end(); iter++) {
+			if (br == *iter) {
+				ponudjeni.erase(iter, iter + 1);
+				return true;
+			}
+		}
+		return false;
+	}
+	inline Token_stream() :full(0), buffer(0) { }
+
+	inline Token get();
+	inline void unget(Token t) { buffer = t; full = true; }
+
+	inline void ignore(char);
+};
+
+//const char let = 'L';
+//const char quit = 'Q';
+const char print = ';';
+const char number = '8';
+//const char name = 'a';
+
+inline Token Token_stream::get()
+{
+	if (full) { full = false; return buffer; }
+	char ch;
+	cin >> ch;
+	switch (ch) {
+	case '(':
+	case ')':
+	case '+':
+	case '-':
+	case '*':
+	case '/':
+	case '%':
+	case ';':
+	case '=':
+		return Token(ch);
+	case '.':
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+	{	cin.unget();
+	int val;
+	cin >> val;
+	return Token(number, val);
+	}
+	default:
+		/*if (isalpha(ch)) {
+			string s;
+			s += ch;
+			while (cin.get(ch) && (isalpha(ch) || isdigit(ch))) s += ch;
+			cin.unget();
+			if (s == "let") return Token(let);
+			if (s == "quit") return Token(quit);
+			return Token(name, s);
+		}*/
+		throw invalid_argument("Bad token");
+	}
+}
+
+inline void Token_stream::ignore(char c)
+{
+	if (full && c == buffer.kind) {
+		full = false;
+		return;
+	}
+	full = false;
+
+	char ch;
+	while (cin >> ch)
+		if (ch == c) return;
+}
+
+
+
+static Token_stream ts;
+
+inline int expression();
+
+inline int primary()
+{
+	Token t = ts.get();
+	switch (t.kind) {
+	case '(':
+	{	int d = expression();
+	t = ts.get();
+	if (t.kind != ')') throw invalid_argument("'(' expected");
+	return d;
+	}
+	case '-':
+		throw invalid_argument("cant make negative numbers");
+	case number:
+		if (!ts.contains(t.value))
+			throw invalid_argument("primary not exist");
+		return t.value;
+	default:
+		throw invalid_argument("primary expected");
+	}
+}
+
+inline int term()
+{
+	int left = primary();
+	while (true) {
+		Token t = ts.get();
+		switch (t.kind) {
+		case '*':
+			left *= primary();
+			break;
+		case '/':
+		{	int d = primary();
+		if (d == 0) throw invalid_argument("divide by zero");
+		if (left % d != 0) throw invalid_argument("non int division");
+		left /= d;
+		break;
+		}
+		default:
+			ts.unget(t);
+			return left;
+		}
+	}
+}
+
+inline int expression()
+{
+	int left = term();
+	while (true) {
+		Token t = ts.get();
+		switch (t.kind) {
+		case '+':
+			left += term();
+			break;
+		case '-':
+			left -= term();
+			break;
+		default:
+			ts.unget(t);
+			return left;
+		}
+	}
+}
+
+/*int declaration()
+{
+	Token t = ts.get();
+	if (t.kind != 'a') throw invalid_argument("name expected in declaration");
+	string name = t.name;
+	Token t2 = ts.get();
+	if (t2.kind != '=') throw invalid_argument("= missing in declaration of ");
+	int d = expression();
+	return d;
+}*/
+
+inline int statement()
+{
+	Token t = ts.get();
+	switch (t.kind) {
+		/*case let:
+			return declaration();*/
+	default:
+		ts.unget(t);
+		return expression();
+	}
+}
+
+inline void clean_up_mess()
+{
+	ts.ignore(print);
+}
+
+const string prompt = "> ";
+const string result = "= ";
+
+inline int calculate()
+{
+	try {
+		//cout << prompt;
+		Token t = ts.get();
+		while (t.kind == print) t = ts.get();
+		ts.unget(t);
+		int res = statement();
+		t = ts.get();
+		if (t.kind != ';')
+			throw invalid_argument("invalid expression");
+		string kraj;
+		getline(cin, kraj);
+		if (!kraj.empty())
+			throw invalid_argument("invalid expression");
+		cout << result << res << endl;
+		return res;
+	}
+	catch (runtime_error& e) {
+		cerr << e.what() << endl;
+		clean_up_mess();
+		return -1;
+	}
+}
+
+inline int playerResult(int who, ostream& os, vector<int> ponudjeni) {
+label1:
+	try {
+		ts.ponudjeni = ponudjeni;
+		string::reverse_iterator riter;
+		cout << "Player " << who << " expression: ";
+		string izraz;
+		getline(cin, izraz);
+		cin.putback('\n');
+		for (riter = izraz.rbegin(); riter < izraz.rend(); riter++) {
+			cin.putback(*riter);
+		}
+		int rez1 = calculate();
+		izraz.pop_back();
+		os << '\t' << izraz;
+		return rez1;
+	}
+	catch (exception& e) {
+		cerr << "exception: " << e.what() << endl;
+		cin.clear();
+		string s;
+		getline(cin, s);
+		goto label1;
+	}
+	catch (...) {
+		cerr << "idk exception: " << endl;
+		cin.clear();
+		string s;
+		getline(cin, s);
+		goto label1;
+	}
+
+	return -1;
+}
